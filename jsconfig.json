@@ -1,0 +1,34 @@
+{
+    "compilerOptions": {
+        "target": "ES2015",
+        "moduleResolution": "bundler",
+        "allowUnreachableCode": false,
+        "allowUnusedLabels": false,
+        "checkJs": true,
+        "keyofStringsOnly": false,
+        "noErrorTruncation": false,
+        "noFallthroughCasesInSwitch": false,
+        "noImplicitAny": false,
+        "noUnusedLocals": false,
+        "noUnusedParameters": false,
+        "noUncheckedIndexedAccess": false,
+        "strict": true,
+        "strictBindCallApply": true,
+        "strictFunctionTypes": true,
+        "strictPropertyInitialization": true,
+        "strictNullChecks": true,
+        "suppressExcessPropertyErrors": false,
+        "suppressImplicitAnyIndexErrors": false,
+        "useUnknownInCatchVariables": true,
+
+        "noEmit": true,
+
+        "noLib": true,
+        "skipLibCheck": true,
+
+        "types": [
+            "./lib.stdlib.d.ts",
+            "./lib.dotsandboxes.d.ts"
+        ]
+    }
+}
