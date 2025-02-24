@@ -1,11 +1,9 @@
+//player that tries its best... init to be mediocre...
 import { sampleArray, getAdjacentSpacerSlots, shuffleArray } from './common.js';
 
 const { SLOT_KIND } = Engine;
 const { board: gameBoard } = Game;
 
-const { expandedColumns, expandedRows, grid } = gameBoard;
-
-// finds a box slot with a given priority level and selects an adjacent spacer to draw a line
 function findPrioritySpacer(gameBoardSlots, ...priorityLineCounts) {
     const priorityBoxSlots = gameBoardSlots.filter(
         (gameBoardSlot) => {
@@ -15,58 +13,105 @@ function findPrioritySpacer(gameBoardSlots, ...priorityLineCounts) {
         },
     );
 
-    // shuffle the priority slots to introduce randomness and avoid predictable patterns(everyday im shuffling)
-    const shuffledPriorityBoxSlots = shuffleArray(priorityBoxSlots);
-    for (const priorityBoxSlot of shuffledPriorityBoxSlots) {
+    const priorityBoxSlot = sampleArray(priorityBoxSlots);
+
+    if (priorityBoxSlot !== null) {
         const adjacentSpacerSlots = getAdjacentSpacerSlots(priorityBoxSlot);
-        if (adjacentSpacerSlots.length > 0) {
-            return sampleArray(adjacentSpacerSlots);
+        return sampleArray(adjacentSpacerSlots);
+    }
+
+    return null;
+}
+
+// Evaluates move priorities dynamically based on the game state
+function evaluateMovePriority(move) {
+    let score = 0;
+    const surroundingLines = gameBoard.countSurroundingLines(move.x, move.y);
+
+    // Higher score for moves that capture boxes
+    if (surroundingLines === 3) {
+        score += 100;
+    }
+    
+    // Penalize moves that might give the opponent an advantage
+    if (surroundingLines === 2) {
+        score -= 20;
+    }
+
+    // Increase priority if fewer boxes remain
+    const remainingBoxes = gameBoard.remainingBoxes;
+    if (remainingBoxes < 10) {
+        score += 30;
+    }
+
+    return { move, score };
+}
+
+// Finds the best move based on capturing boxes and strategic positioning
+function categorizeMoves() {
+    const legalMoves = gameBoard.walkSpacers()
+        .filter((slot) => slot.slotKind === SLOT_KIND.spacer)
+        .toArray();
+
+    let evaluatedMoves = legalMoves.map(evaluateMovePriority);
+    
+    // Sort moves by highest priority first
+    evaluatedMoves.sort((a, b) => b.score - a.score);
+    return evaluatedMoves.map(entry => entry.move);
+}
+
+// Prevents opponent from creating chains by blocking setup moves
+function denyOpponentSetup() {
+    const legalMoves = gameBoard.walkSpacers()
+        .filter((slot) => slot.slotKind === SLOT_KIND.spacer)
+        .toArray();
+
+    for (const move of legalMoves) {
+        if (gameBoard.countSurroundingLines(move.x, move.y) === 2) {
+            return move; // Block chain setup
         }
     }
     return null;
 }
 
-// dinds a defensive move by selecting a random available spacer slot
-function findDefensiveMove() {
-    const availableSpacers = gameBoard.walkSpacers().filter(
-        (slot) => slot.slotKind === SLOT_KIND.spacer
-    ).toArray();
+// Prioritizes capturing available boxes before strategic positioning
+function greedyMove() {
+    const boxBoardSlot = gameBoard.walkBoxes()
+        .filter((gameBoardSlot) => gameBoard.countSurroundingLines(gameBoardSlot.x, gameBoardSlot.y) === 3)
+        .take(1)
+        .next().value ?? null;
 
-    // shuffle the spacers to avoid predictable defensive patterns
-    const shuffledSpacers = shuffleArray(availableSpacers);
-    return sampleArray(shuffledSpacers);
+    if (boxBoardSlot !== null) {
+        const [firstAdjacentSpacer] = getAdjacentSpacerSlots(boxBoardSlot);
+        return firstAdjacentSpacer;
+    }
+    return null;
 }
 
 export default () => {
-    // collect all available boxes on the board
     const availableBoxes = gameBoard
         .walkBoxes()
-        .filter((gameBoardSlot) => gameBoardSlot.slotKind === SLOT_KIND.box)
+        .filter(
+            (gameBoardSlot) => {
+                const { slotKind } = gameBoardSlot;
+                return slotKind === SLOT_KIND.box;
+            },
+        )
         .toArray();
 
-    // prioritize moves that complete a box first
-    let gameBoardSlot = findPrioritySpacer(availableBoxes, 3);
+    const gameBoardSlot = findPrioritySpacer(availableBoxes, 3) ??
+        findPrioritySpacer(availableBoxes, 0, 1) ??
+        findPrioritySpacer(availableBoxes, 2);
 
-    // if no immediate box completion, look for safe initial moves
-    if (!gameBoardSlot) {
-        gameBoardSlot = findPrioritySpacer(availableBoxes, 0, 1);
-    }
-
-    // ff no initial safe moves, look for neutral moves that dont set up the opponent
-    if (!gameBoardSlot) {
-        gameBoardSlot = findPrioritySpacer(availableBoxes, 2);
-    }
-
-    // ff no strategic move is found, fall back to a defensive move (dont be a loser)
-    if (!gameBoardSlot) {
-        gameBoardSlot = findDefensiveMove();
-    }
-
-    // return chosen move if available :) hopefully
     if (gameBoardSlot !== null) {
         const { x, y } = gameBoardSlot;
-        return { x, y };
+        return {
+            x,
+            y,
+        };
     }
-
-    return null; // NOT VALID
+    
+    // If no strategic move is found, fall back to optimized move selection
+    const selectedMove = greedyMove() ?? denyOpponentSetup() ?? sampleArray(categorizeMoves());
+    return selectedMove ? { x: selectedMove.x, y: selectedMove.y } : null;
 };
